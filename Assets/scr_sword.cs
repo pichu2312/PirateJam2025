@@ -1,12 +1,17 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading;
 using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.WSA;
-
-
+using Vector3 = UnityEngine.Vector3;
+using Vector2 = UnityEngine.Vector2;
+using Quaternion = UnityEngine.Quaternion;
+using UnityEditor;
+using UnityEngine.UIElements;
 
 
 public class scr_sword : MonoBehaviour
@@ -31,9 +36,14 @@ public class scr_sword : MonoBehaviour
 
 
     private Rigidbody rigidbody;
+    public SpringArm springCamera;
     private Camera camera;
     private Quaternion baseCamRot;
-    private SpriteRenderer arrow;
+
+    //Arrow properties
+    public GameObject arrow;
+    private SpriteRenderer arrowSprite;
+    private Transform arrowPivot;
 
     //Collision
     [SerializeField, Range(0.005f, 0.1f)]
@@ -46,10 +56,21 @@ public class scr_sword : MonoBehaviour
     private float launchTimer = 0;
     public float minLaunch = 1f;
     public float maxLaunch = 3f;
-    
+    private Quaternion launchDir;
+    public Vector2 launchVal;
+    private bool canLaunch = false;
+
+    //Air rotation
+    public float rotAmount = 10;
 
     //Controls
-    private KeyCode pullBack = KeyCode.S;
+    private KeyCode pullBack = KeyCode.Space;
+
+    private KeyCode left = KeyCode.A;
+    private KeyCode right = KeyCode.D;
+    private KeyCode up = KeyCode.W;
+    private KeyCode down = KeyCode.S;
+
 
 
     // Start is called before the first frame update
@@ -69,10 +90,11 @@ public class scr_sword : MonoBehaviour
 
         rigidbody = GetComponent<Rigidbody>();
 
-        camera = GetComponentInChildren<Camera>();
-        baseCamRot = camera.transform.rotation;
+        camera = springCamera.GetComponentInChildren<Camera>();
+        //baseCamRot = camera.transform.rotation;
 
-        arrow = GetComponentInChildren<SpriteRenderer>();
+        arrowSprite = arrow.GetComponentInChildren<SpriteRenderer>();
+        arrowPivot = arrow.transform.GetChild(0);
 
     }
 
@@ -90,8 +112,16 @@ public class scr_sword : MonoBehaviour
     }
 
     void LateUpdate() {
-        camera.transform.rotation = baseCamRot;
+            arrow.transform.position = transform.position;
+
+            if ((camera.fieldOfView > 60) && (!launchCharging)) {
+                camera.fieldOfView -= 1;
+            }
+            else if (camera.fieldOfView < 60) {
+                camera.fieldOfView = 60;
+            }
     }
+
 
     void DebugCommands() {
         if (debug) {
@@ -109,20 +139,49 @@ public class scr_sword : MonoBehaviour
     }
 
     void UserInput() {
-        if (Input.GetKeyDown(pullBack)) {
-            arrow.enabled = true;
+        //Begin Charging for a launch
+        if (Input.GetKeyDown(pullBack) /*&& (canLaunch)*/) {
+            arrowSprite.enabled = true;
             launchCharging = true;
             launchTimer = 0;
+            canLaunch = false;
+
+            //Set positions to the other side of our spring camera
+            launchDir = springCamera.transform.rotation.normalized;
+            arrowPivot.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y, 0);
         }
 
 
         if (Input.GetKeyUp(pullBack)) {
-            arrow.enabled = false;
-            launchCharging = false;
+            if (launchCharging) {
+                arrowSprite.enabled = false;
+                launchCharging = false;
 
-            if (launchTimer > minLaunch) {
-                Launch();
+                if (launchTimer > minLaunch) {
+                    Launch();
+                }
             }
+        }
+
+        if (Input.GetKey(KeyCode.Escape)) {
+            UnityEngine.Application.Quit();
+        }
+
+        //Add rotation
+        if (Input.GetKey(left)) {
+            rigidbody.AddRelativeTorque(Vector3.right * rotAmount);
+        }
+
+        if (Input.GetKey(right)) {
+            rigidbody.AddRelativeTorque(Vector3.left * rotAmount);
+        }
+
+        if (Input.GetKey(up)) {
+            rigidbody.AddRelativeTorque(Vector3.forward * rotAmount);
+        }
+
+        if (Input.GetKey(down)) {
+            rigidbody.AddRelativeTorque(Vector3.back * rotAmount);
         }
     }
 
@@ -136,9 +195,11 @@ public class scr_sword : MonoBehaviour
                 launchTimer = maxLaunch;
             }
 
+            //Some visual effects
+            float arrowLength = EasingFunction.EaseOutExpo(0.5f, 3f, launchTimer/maxLaunch);
+            arrowSprite.transform.localScale = new Vector3(arrow.transform.localScale.x, arrowLength,0);
 
-            float arrowLength = Mathf.Lerp(0.05f, 0.3f, launchTimer/maxLaunch);
-            arrow.transform.localScale = new Vector3(arrow.transform.localScale.x, arrowLength,0);
+            camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchTimer/maxLaunch);
         }
     }
 
@@ -150,7 +211,7 @@ public class scr_sword : MonoBehaviour
             if (swordTimer > swordSharpness) {
                 rigidbody.velocity = Vector3.zero;
                 rigidbody.angularVelocity = Vector3.zero;
-                rigidbody.useGravity = false;
+                ToggleRigidbodyGravity(false);
 
                 //wordHitbox.enabled = true;
                 swordEnteringTerrain = false;
@@ -158,10 +219,13 @@ public class scr_sword : MonoBehaviour
         }
     }
 
+
+
     void OnTriggerEnter(UnityEngine.Collider other)
     {
         Debug.Log("Colliding with " + other.name);
 
+        canLaunch = true;
 
         //Set the sword hitbox to no longer collide
         swordHitbox.enabled = false;
@@ -174,13 +238,20 @@ public class scr_sword : MonoBehaviour
     {
         Debug.Log("Uncolliding with " + other.name);
 
-        swordHitbox.enabled = true;
-        rigidbody.useGravity = true;
+        canLaunch = false;
 
+        swordHitbox.enabled = true;
+        ToggleRigidbodyGravity(true);
 
     }
 
     void Launch() {
-        rigidbody.AddForce(new Vector3(200 * launchTimer, 100 * launchTimer, 0), ForceMode.Force);
+        rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchTimer, launchVal.x * launchTimer), ForceMode.Force);
+        rigidbody.AddRelativeTorque(arrowPivot.rotation * new Vector3(0, 0, 100 * launchTimer), ForceMode.Force);
+        ToggleRigidbodyGravity(true);
+    }
+
+    void ToggleRigidbodyGravity(bool val) {
+        rigidbody.useGravity = val;
     }
 }
