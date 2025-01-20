@@ -116,7 +116,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.0089, z: 0}
-  m_LocalScale: {x: 1, y: 0.7313683, z: 1}
+  m_LocalScale: {x: 1, y: 0.49923685, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6118512295727521702}
@@ -171,7 +171,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 2.3283e-10, y: 0.0178, z: -9.7884e-11}
-  m_LocalScale: {x: 0.3, y: 0.82598, z: 0.3}
+  m_LocalScale: {x: 0.3, y: 0.7746206, z: 0.3}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6118512295727521702}
@@ -441,10 +441,15 @@ MonoBehaviour:
   tpRotation: {x: 30, y: 0, z: -180, w: 0}
   debugText: {fileID: 0}
   springCamera: {fileID: 0}
+  arrow: {fileID: 0}
   swordSharpness: 0.1
   minLaunch: 1
   maxLaunch: 3
   launchVal: {x: 0, y: 0}
+  launchValFloor: {x: 0, y: 0}
+  rotAmount: 10
+  wood: {fileID: 13400000, guid: 575f861017187114194a7207350ee5f6, type: 2}
+  stone: {fileID: 13400000, guid: 7cbc28e3802752546be07f65cc868b28, type: 2}
 --- !u!4 &7530670985845305372 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: bf58ec14cae9b7e48825aaf1ad0f5306, type: 3}

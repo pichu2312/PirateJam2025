@@ -59,7 +59,10 @@ public class scr_sword : MonoBehaviour
     public float maxLaunch = 3f;
     private Quaternion launchDir;
     public Vector2 launchVal;
+    public Vector2 launchValFloor;
+
     private bool canLaunch = false;
+    private bool impaled = false;
 
     //Air rotation
     public float rotAmount = 10;
@@ -73,6 +76,10 @@ public class scr_sword : MonoBehaviour
     private KeyCode right = KeyCode.D;
     private KeyCode up = KeyCode.W;
     private KeyCode down = KeyCode.S;
+
+    //Materials
+    public PhysicMaterial wood;
+    public PhysicMaterial stone;
 
 
 
@@ -166,13 +173,21 @@ public class scr_sword : MonoBehaviour
             }
         }
 
-        if (Input.GetKey(KeyCode.Escape)) {
-            UnityEngine.Device.Application.Quit();
+        if (Input.GetKey("escape")) {
+            UnityEngine.Application.Quit();
         }
 
         //Add rotation
         if (canRotate) {
-            float turnH = Input.GetAxis("Horizontal");
+            AirRotation();
+        }
+        else if (!impaled) {
+            //GroundRotation();
+        }
+    }
+
+    void AirRotation() {
+        float turnH = Input.GetAxis("Horizontal");
             float turnV = Input.GetAxis("Vertical");
 
             if (Input.GetKey(left)) {
@@ -194,7 +209,7 @@ public class scr_sword : MonoBehaviour
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
                 
 
-                transform.localEulerAngles += launchDir * Vector3.right * Time.deltaTime * rotAmount;
+                //transform.localEulerAngles += launchDir * Vector3.right * Time.deltaTime * rotAmount;
             }
 
             if (Input.GetKey(up)) {
@@ -210,9 +225,25 @@ public class scr_sword : MonoBehaviour
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(0, 0, -rotAmount) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
             }
-        }
     }
 
+    void GroundRotation() {
+                    if (Input.GetKey(left)) {
+                rigidbody.AddTorque(-rotAmount  * transform.right);
+            }
+
+            if (Input.GetKey(right)) {
+                rigidbody.AddTorque(rotAmount * transform.right);
+            }
+
+            if (Input.GetKey(up)) {
+                rigidbody.AddTorque(rotAmount * transform.forward);
+            }
+
+            if (Input.GetKey(down)) {
+                rigidbody.AddTorque(-rotAmount * transform.forward);
+            }
+    }
     void ProcessLaunchCharging() {
         if (launchCharging) {
             launchTimer += Time.deltaTime;
@@ -236,13 +267,17 @@ public class scr_sword : MonoBehaviour
         if (swordEnteringTerrain) {
             swordTimer += Time.deltaTime;
 
-            if (swordTimer > swordSharpness) {
+            if ((swordTimer > swordSharpness) && (canLaunch)) {
+
+                ToggleRigidbodyGravity(false);
+
                 rigidbody.velocity = Vector3.zero;
                 rigidbody.angularVelocity = Vector3.zero;
-                ToggleRigidbodyGravity(false);
 
                 //wordHitbox.enabled = true;
                 swordEnteringTerrain = false;
+
+                impaled = true;
             }
         }
     }
@@ -260,17 +295,19 @@ public class scr_sword : MonoBehaviour
 
     void OnTriggerEnter(UnityEngine.Collider other)
     {
-        Debug.Log("Triggering with " + other.name);
+        //bad but works
+        if (other.material.name == wood.name + " (Instance)") {
+            Debug.Log("Triggering with " + other.name);
 
-        canLaunch = true;
+            canLaunch = true;
 
-        //Set the sword hitbox to no longer collide
-        swordHitbox.enabled = false;
-        swordEnteringTerrain = true;
+            //Set the sword hitbox to no longer collide
+            swordHitbox.enabled = false;
+            swordEnteringTerrain = true;
 
-        swordTimer = 0f;
-        OnFloor(true);
-
+            swordTimer = 0f;
+            OnFloor(true);
+        }
     }
 
     void OnTriggerExit(UnityEngine.Collider other)
@@ -290,9 +327,15 @@ public class scr_sword : MonoBehaviour
     }
 
     void Launch() {
-        rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchTimer, launchVal.x * launchTimer), ForceMode.Force);
+        if (impaled) {
+            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchTimer, launchVal.x * launchTimer), ForceMode.Force);
+        }
+        else {
+            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchValFloor.y * launchTimer, launchValFloor.x * launchTimer), ForceMode.Force);
+        }
         //rigidbody.AddRelativeTorque(arrowPivot.rotation * new Vector3(0, 0, 100 * launchTimer), ForceMode.Force);
         ToggleRigidbodyGravity(true);
+        impaled = false;
     }
 
     void ToggleRigidbodyGravity(bool val) {
