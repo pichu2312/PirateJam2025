@@ -50,23 +50,39 @@ public class scr_sword : MonoBehaviour
     [SerializeField, Range(0.005f, 0.1f)]
     public float swordSharpness = 1.0f;
     private float swordTimer = 0f;
-    private bool swordEnteringTerrain;
+    public float minVelocity = 1f;
+    //private bool swordEnteringTerrain;
+    //private bool impaled = false;
+    enum Piercing {Lying, InAir, EnteringTerrain, Impaled}
+    Piercing swordStatus = Piercing.InAir;
+    UnityEngine.Collider otherEntity;
 
     //Launching
     private bool launchCharging;
     private float launchTimer = 0;
+    private float launchAmount;
     public float minLaunch = 1f;
     public float maxLaunch = 3f;
+    public float launchTimeout = 5f;
     private Quaternion launchDir;
     public Vector2 launchVal;
     public Vector2 launchValFloor;
 
-    private bool canLaunch = false;
-    private bool impaled = false;
+
 
     //Air rotation
     public float rotAmount = 10;
-    private bool canRotate = true;
+    public float floorRotAmount;
+    private float usedRot;
+
+    //Special Moves
+    enum Special {None, Floating, Zooming}
+    Special special = Special.None;
+
+    public float floatLength = 1.0f;
+
+    private float specialLength;
+    private float specialTimer = 0f;
 
 
     //Controls
@@ -77,9 +93,14 @@ public class scr_sword : MonoBehaviour
     private KeyCode up = KeyCode.W;
     private KeyCode down = KeyCode.S;
 
+    private KeyCode special1 = KeyCode.LeftShift;
+
+
     //Materials
     public PhysicMaterial wood;
     public PhysicMaterial stone;
+
+    public Material myMetal;
 
 
 
@@ -115,6 +136,10 @@ public class scr_sword : MonoBehaviour
         UserInput();
 
         ProcessLaunchCharging();
+
+        SpecialMoves();
+
+        RoutineChecks();
     }
     void FixedUpdate()
     {
@@ -144,17 +169,18 @@ public class scr_sword : MonoBehaviour
             }
 
             debugText.text = "Velocity: " + rigidbody.velocity;
+            debugText.text += "\nStatus: " + swordStatus;
+            debugText.text += "\nSpecial: " + special;
 
         }
     }
 
     void UserInput() {
         //Begin Charging for a launch
-        if (Input.GetKeyDown(pullBack) /*&& (canLaunch)*/) {
+        if (Input.GetKeyDown(pullBack) && ((swordStatus == Piercing.Lying) || (swordStatus == Piercing.Impaled)))  {
             arrowSprite.enabled = true;
             launchCharging = true;
             launchTimer = 0;
-            canLaunch = false;
 
             //Set positions to the other side of our spring camera
             launchDir = springCamera.transform.rotation.normalized;
@@ -164,8 +190,7 @@ public class scr_sword : MonoBehaviour
 
         if (Input.GetKeyUp(pullBack)) {
             if (launchCharging) {
-                arrowSprite.enabled = false;
-                launchCharging = false;
+                EndLaunchCharge();
 
                 if (launchTimer > minLaunch) {
                     Launch();
@@ -177,18 +202,29 @@ public class scr_sword : MonoBehaviour
             UnityEngine.Application.Quit();
         }
 
+        //Special moves
+        if (special == Special.None) {
+            if (Input.GetKeyDown(special1)) {
+                Float();
+            }
+        }
+
         //Add rotation
-        if (canRotate) {
+        if (swordStatus == Piercing.InAir) {
             AirRotation();
         }
-        else if (!impaled) {
-            //GroundRotation();
+        else if (swordStatus == Piercing.Lying) {
+            GroundRotation();
         }
     }
 
+    void EndLaunchCharge() {
+        arrowSprite.enabled = false;
+        launchCharging = false;
+    }
+
     void AirRotation() {
-        float turnH = Input.GetAxis("Horizontal");
-            float turnV = Input.GetAxis("Vertical");
+
 
             if (Input.GetKey(left)) {
                 //rigidbody.AddTorque(-rotAmount  * transform.right);
@@ -228,85 +264,181 @@ public class scr_sword : MonoBehaviour
     }
 
     void GroundRotation() {
-                    if (Input.GetKey(left)) {
-                rigidbody.AddTorque(-rotAmount  * transform.right);
+            if (Input.GetKey(left)) {
+                //rigidbody.AddTorque(new Vector3(floorRotAmount, 0, 0));
+                rigidbody.AddTorque(rotAmount * transform.right);
+
             }
 
             if (Input.GetKey(right)) {
-                rigidbody.AddTorque(rotAmount * transform.right);
+                //rigidbody.AddTorque(new Vector3(-floorRotAmount, 0, 0));
+                rigidbody.AddTorque(-rotAmount * transform.right);
+
             }
 
             if (Input.GetKey(up)) {
+                //rigidbody.AddTorque(new Vector3(0, 0, floorRotAmount));
                 rigidbody.AddTorque(rotAmount * transform.forward);
             }
 
             if (Input.GetKey(down)) {
-                rigidbody.AddTorque(-rotAmount * transform.forward);
+                //rigidbody.AddTorque(new Vector3(0, 0, -floorRotAmount));
+                 rigidbody.AddTorque(-rotAmount * transform.forward);
+
             }
+    }
+    
+    void EndSpecial() {
+        switch (special) {
+            case Special.Floating: ToggleRigidbodyGravity(true); break;
+        }
+
+        specialTimer = 0;
+        special = Special.None;
+    }
+
+    void Float() {
+        //If in air, cut all vertical speed for a duration
+        if (swordStatus == Piercing.InAir)  {
+            rigidbody.velocity = new Vector3(rigidbody.velocity.x, 0, rigidbody.velocity.z);
+            ToggleRigidbodyGravity(false);
+
+            specialLength = floatLength;
+            special = Special.Floating;
+        }
     }
     void ProcessLaunchCharging() {
         if (launchCharging) {
             launchTimer += Time.deltaTime;
 
-
-            //POTENTIALLY INEFFICENT
-            if (launchTimer > maxLaunch) {
-                launchTimer = maxLaunch;
+            if (launchTimer > launchTimeout) {
+                EndLaunchCharge();
+                return;
             }
 
+            launchAmount = launchTimer;
+            //POTENTIALLY INEFFICENT
+            if (launchAmount > maxLaunch) {
+                launchAmount = maxLaunch;
+            }
+            
+            
+
             //Some visual effects
-            float arrowLength = EasingFunction.EaseOutExpo(0.5f, 3f, launchTimer/maxLaunch);
+            float arrowLength = EasingFunction.EaseOutExpo(0.5f, 3f, launchAmount/maxLaunch);
             arrowSprite.transform.localScale = new Vector3(arrow.transform.localScale.x, arrowLength,0);
 
-            camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchTimer/maxLaunch);
+            camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchAmount/maxLaunch);
+        }
+    }
+
+    void SpecialMoves() {
+        switch (special) {
+            case Special.Floating: 
+                specialTimer += Time.deltaTime;
+                
+            break;
+        }
+
+        if (specialTimer > specialLength)  {
+            EndSpecial();
+        }
+    }
+
+    void RoutineChecks() {
+        //Potentially wont sue this so
+        if (swordStatus == Piercing.Impaled) {
+            myMetal.color = Color.red;
+        }
+        else {
+            myMetal.color = Color.white;
+        }
+
+        if (swordStatus == Piercing.Impaled) {
+            rigidbody.velocity = Vector3.zero;
+            rigidbody.angularVelocity = Vector3.zero;
         }
     }
 
     //If the sword is entering a piece of terrain, increase the timer before its hitbox is renabled
     void ProcessCollision() {
-        if (swordEnteringTerrain) {
+        if (swordStatus == Piercing.EnteringTerrain) {
             swordTimer += Time.deltaTime;
 
-            if ((swordTimer > swordSharpness) && (canLaunch)) {
-
-                ToggleRigidbodyGravity(false);
-
-                rigidbody.velocity = Vector3.zero;
-                rigidbody.angularVelocity = Vector3.zero;
-
-                //wordHitbox.enabled = true;
-                swordEnteringTerrain = false;
-
-                impaled = true;
+            if (swordTimer > swordSharpness) {
+                Impale();
             }
         }
     }
 
+    void Impale() {
+
+        ToggleRigidbodyGravity(false);
+
+        rigidbody.velocity = Vector3.zero;
+        rigidbody.angularVelocity = Vector3.zero;
+
+        //wordHitbox.enabled = true;
+        swordStatus = Piercing.Impaled;
+
+        if (otherEntity.CompareTag("Button")) {
+            TriggerButton(otherEntity.GetComponent<scr_button>());
+        }
+        //OnFloor(true);
+    }
+
+    void TriggerButton(scr_button button) {
+
+        if (button != null) {
+            switch (button.action) {
+                case scr_button.Action.Open: 
+                Destroy(button.otherObject);
+                
+            break;
+            }
+        }
+
+
+    }
+
+    //Only process these collisions when we're not entering terrain
     void OnCollisionEnter() {
         Debug.Log("Colliding");
-        OnFloor(true);
+        //OnFloor(true);
+        if (swordStatus == Piercing.InAir)  {
+            swordStatus = Piercing.Lying;
+        }
     }
 
     void OnCollisionExit() {
         Debug.Log("UnColliding");
-        OnFloor(false);
+        //OnFloor(false);
+        if (swordStatus == Piercing.Lying)  {
+            swordStatus = Piercing.InAir;
+        }
     }
 
 
     void OnTriggerEnter(UnityEngine.Collider other)
     {
+        otherEntity = other;
         //bad but works
         if (other.material.name == wood.name + " (Instance)") {
-            Debug.Log("Triggering with " + other.name);
+            //Check we're above the needed amount of velocity
+            if (rigidbody.velocity.magnitude > minVelocity) {
+                Debug.Log("Triggering with " + other.name);
 
-            canLaunch = true;
+                //canLaunch = true;
 
-            //Set the sword hitbox to no longer collide
-            swordHitbox.enabled = false;
-            swordEnteringTerrain = true;
+                //Set the sword hitbox to no longer collide
+                EndSpecial();
+                swordHitbox.enabled = false;
+                swordStatus = Piercing.EnteringTerrain;
 
-            swordTimer = 0f;
-            OnFloor(true);
+                swordTimer = 0f;
+            }
+
+            //OnFloor(true);
         }
     }
 
@@ -314,28 +446,29 @@ public class scr_sword : MonoBehaviour
     {
         Debug.Log("UnTriggering with " + other.name);
 
-        canLaunch = false;
-
         swordHitbox.enabled = true;
+        swordStatus = Piercing.InAir;
+
+
         ToggleRigidbodyGravity(true);
-        OnFloor(false);
+        //OnFloor(false);
     }
 
-    void OnFloor(bool val) {
-        canLaunch = val;
-        canRotate = !val;
-    }
 
     void Launch() {
-        if (impaled) {
-            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchTimer, launchVal.x * launchTimer), ForceMode.Force);
+        if (swordStatus == Piercing.Impaled) {
+            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchAmount, launchVal.x * launchAmount), ForceMode.Force);
         }
         else {
-            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchValFloor.y * launchTimer, launchValFloor.x * launchTimer), ForceMode.Force);
+            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchValFloor.y * launchAmount, launchValFloor.x * launchAmount), ForceMode.Force);
         }
         //rigidbody.AddRelativeTorque(arrowPivot.rotation * new Vector3(0, 0, 100 * launchTimer), ForceMode.Force);
         ToggleRigidbodyGravity(true);
-        impaled = false;
+        swordStatus = Piercing.InAir;
+
+        //Add a rotation
+        //Quaternion lookRot = Quaternion.FromToRotation(arrow.transform.forward - transform.forward, Vector3.forward);
+        //rigidbody.AddTorque(lookRot.eulerAngles.normalized * 100, ForceMode.Force);
     }
 
     void ToggleRigidbodyGravity(bool val) {
