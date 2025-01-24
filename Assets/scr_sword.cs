@@ -13,6 +13,7 @@ using Quaternion = UnityEngine.Quaternion;
 using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEngine.EventSystems;
+using Deform;
 
 
 public class scr_sword : MonoBehaviour
@@ -53,7 +54,7 @@ public class scr_sword : MonoBehaviour
     public float minVelocity = 1f;
     //private bool swordEnteringTerrain;
     //private bool impaled = false;
-    enum Piercing {Lying, InAir, EnteringTerrain, Impaled}
+    enum Piercing {Stopped, Lying, InAir, EnteringTerrain, Impaled}
     Piercing swordStatus = Piercing.InAir;
     UnityEngine.Collider otherEntity;
 
@@ -67,6 +68,8 @@ public class scr_sword : MonoBehaviour
     private Quaternion launchDir;
     public Vector2 launchVal;
     public Vector2 launchValFloor;
+    public float maxBend = 70f;
+    private BendDeformer bend;
 
 
 
@@ -78,11 +81,29 @@ public class scr_sword : MonoBehaviour
     //Special Moves
     enum Special {None, Floating, Zooming}
     Special special = Special.None;
-
-    public float floatLength = 1.0f;
-
+    
     private float specialLength;
     private float specialTimer = 0f;
+
+    public float floatLength = 1.0f;
+    public float zoomLength = 0.5f;
+
+
+    //Activate Button
+    private scr_button activatedButton;
+    enum CameraMode {None, MovingTo, Stopped, MovingBack}
+    private CameraMode cameraMode = CameraMode.None;
+    private Transform cameraMovePosAndRot;
+    private Transform cameraSavedPosAndRot;
+
+    //ANother method
+    private Camera savedCamera;
+    private Camera newCamera;
+
+    private float cameraTimer;
+    private float cameraTimerLength;
+    public float cameraMoveTime = 1f;
+    public float cameraWaitTime = 1.5f;
 
 
     //Controls
@@ -94,6 +115,8 @@ public class scr_sword : MonoBehaviour
     private KeyCode down = KeyCode.S;
 
     private KeyCode special1 = KeyCode.LeftShift;
+    private KeyCode special2 = KeyCode.LeftControl;
+
 
 
     //Materials
@@ -127,17 +150,24 @@ public class scr_sword : MonoBehaviour
         arrowSprite = arrow.GetComponentInChildren<SpriteRenderer>();
         arrowPivot = arrow.transform.GetChild(0);
 
+        bend = GetComponentInChildren<BendDeformer>();
+
     }
 
     // Update is called once per frame
     void Update() {
         DebugCommands();
 
-        UserInput();
+        //Pause for cutscenes and the like
+        if (swordStatus != Piercing.Stopped) {
+            UserInput();
 
-        ProcessLaunchCharging();
+            ProcessLaunchCharging();
 
-        SpecialMoves();
+            SpecialMoves();
+        }
+
+        MoveCamera();
 
         RoutineChecks();
     }
@@ -155,6 +185,13 @@ public class scr_sword : MonoBehaviour
             else if (camera.fieldOfView < 60) {
                 camera.fieldOfView = 60;
             }
+
+            if ((bend.Angle > 0) && (!launchCharging)) {
+                bend.Angle -= 20;
+            }
+            else if (bend.Angle < 0) {
+                bend.Angle = 0;
+            }
     }
 
 
@@ -162,6 +199,7 @@ public class scr_sword : MonoBehaviour
         if (debug) {
             if (Input.GetKeyUp(KeyCode.Tab)) {
                 transform.SetPositionAndRotation(tpPosition, tpRotation);
+                rigidbody.angularVelocity = Vector3.zero;
             }
 
             if (Input.GetKeyUp(KeyCode.Return)) {
@@ -176,6 +214,7 @@ public class scr_sword : MonoBehaviour
     }
 
     void UserInput() {
+        
         //Begin Charging for a launch
         if (Input.GetKeyDown(pullBack) && ((swordStatus == Piercing.Lying) || (swordStatus == Piercing.Impaled)))  {
             arrowSprite.enabled = true;
@@ -185,6 +224,9 @@ public class scr_sword : MonoBehaviour
             //Set positions to the other side of our spring camera
             launchDir = springCamera.transform.rotation.normalized;
             arrowPivot.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y, 0);
+
+            //same with bendy
+            bend.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y + 90, 0);
         }
 
 
@@ -207,6 +249,10 @@ public class scr_sword : MonoBehaviour
             if (Input.GetKeyDown(special1)) {
                 Float();
             }
+
+            if (Input.GetKeyDown(special2)) {
+                Zoom();
+            }
         }
 
         //Add rotation
@@ -225,13 +271,17 @@ public class scr_sword : MonoBehaviour
 
     void AirRotation() {
 
+            Vector3 torque = Vector3.zero;
 
             if (Input.GetKey(left)) {
                 //rigidbody.AddTorque(-rotAmount  * transform.right);
 
-                
+                /*
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(rotAmount, 0, 0) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
+                */
+                torque = (arrowPivot.rotation  * Vector3.back).normalized * rotAmount;
+
                 
 
                 //rigidbody.AddTorque(launchDir * Vector3.forward * Time.deltaTime * rotAmount);
@@ -240,26 +290,48 @@ public class scr_sword : MonoBehaviour
             if (Input.GetKey(right)) {
                 //rigidbody.AddTorque(rotAmount * transform.right);
 
-                
+
+                /*
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(-rotAmount, 0, 0) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
+                */
+                torque = (arrowPivot.rotation  * Vector3.forward).normalized * rotAmount;
+
                 
 
                 //transform.localEulerAngles += launchDir * Vector3.right * Time.deltaTime * rotAmount;
             }
 
-            if (Input.GetKey(up)) {
+            if (Input.GetKey(down)) {
                 //rigidbody.AddTorque(rotAmount * transform.forward);
 
+                /*
+                Vector3 target = (arrowPivot.transform.position - rigidbody.position).normalized;
+                Quaternion deltaRotation = Quaternion.Euler(new Vector3(target.x * rotAmount, 0, target.z * rotAmount) * Time.fixedDeltaTime);
+                rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
+                */
+
+                /*
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(0, 0, rotAmount) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
-
+                */ 
+                torque = (arrowPivot.rotation  * Vector3.right).normalized * rotAmount;
             }
 
-            if (Input.GetKey(down)) {
+            if (Input.GetKey(up)) {
                 //rigidbody.AddTorque(-rotAmount * transform.forward);
+
+                /*
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(0, 0, -rotAmount) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
+
+                */
+                torque = (arrowPivot.rotation  * Vector3.left).normalized * rotAmount;
+            }
+
+            if (Input.GetKey(up) || Input.GetKey(down) || Input.GetKey(left) || Input.GetKey(right)) {
+                    rigidbody.MoveRotation(rigidbody.rotation * Quaternion.Euler(torque * Time.deltaTime));
+
             }
     }
 
@@ -276,12 +348,12 @@ public class scr_sword : MonoBehaviour
 
             }
 
-            if (Input.GetKey(up)) {
+            if (Input.GetKey(down)) {
                 //rigidbody.AddTorque(new Vector3(0, 0, floorRotAmount));
                 rigidbody.AddTorque(rotAmount * transform.forward);
             }
 
-            if (Input.GetKey(down)) {
+            if (Input.GetKey(up)) {
                 //rigidbody.AddTorque(new Vector3(0, 0, -floorRotAmount));
                  rigidbody.AddTorque(-rotAmount * transform.forward);
 
@@ -307,6 +379,16 @@ public class scr_sword : MonoBehaviour
             special = Special.Floating;
         }
     }
+
+    void Zoom() {
+        if (swordStatus == Piercing.InAir)  {
+            rigidbody.velocity = new Vector3(rigidbody.velocity.x, 0, rigidbody.velocity.z);
+            ToggleRigidbodyGravity(false);
+
+            specialLength = floatLength;
+            special = Special.Floating;
+        }   
+    }
     void ProcessLaunchCharging() {
         if (launchCharging) {
             launchTimer += Time.deltaTime;
@@ -329,6 +411,9 @@ public class scr_sword : MonoBehaviour
             arrowSprite.transform.localScale = new Vector3(arrow.transform.localScale.x, arrowLength,0);
 
             camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchAmount/maxLaunch);
+
+            //Bend
+            bend.Angle = EasingFunction.EaseOutExpo(0, maxBend, launchAmount/maxLaunch);
         }
     }
 
@@ -343,6 +428,27 @@ public class scr_sword : MonoBehaviour
         if (specialTimer > specialLength)  {
             EndSpecial();
         }
+    }
+
+    void MoveCamera() {
+        if (cameraMode != CameraMode.None) {
+            cameraTimer += Time.deltaTime;
+
+            if (cameraMode != CameraMode.Stopped) {
+                //camera.transform.SetPositionAndRotation(Vector3.Lerp(cameraSavedPosAndRot.position ,cameraMovePosAndRot.position, cameraTimerLength/cameraTimer), Quaternion.Lerp(cameraSavedPosAndRot.rotation ,cameraMovePosAndRot.rotation, cameraTimerLength/cameraTimer));
+            }
+
+            if (cameraTimer > cameraTimerLength) {
+                switch (cameraMode) {
+                    case CameraMode.MovingTo: SetCameraMove(cameraSavedPosAndRot, cameraWaitTime, CameraMode.Stopped); TriggerButtonEffect(activatedButton); break;
+                    case CameraMode.Stopped: SetCameraMove(cameraSavedPosAndRot, cameraMoveTime, CameraMode.MovingBack); newCamera.enabled = false; break;
+                    case CameraMode.MovingBack: cameraMode = CameraMode.None; swordStatus = Piercing.Impaled; break;
+
+                }
+
+            }
+        }
+
     }
 
     void RoutineChecks() {
@@ -382,13 +488,41 @@ public class scr_sword : MonoBehaviour
         swordStatus = Piercing.Impaled;
 
         if (otherEntity.CompareTag("Button")) {
-            TriggerButton(otherEntity.GetComponent<scr_button>());
+            TriggerButton(otherEntity);
         }
         //OnFloor(true);
     }
 
-    void TriggerButton(scr_button button) {
+    void TriggerButton(Collider buttonObject) {
+        scr_button button = buttonObject.GetComponentInParent<scr_button>();
+        Camera moveToCamera = buttonObject.transform.parent.GetComponentInChildren<Camera>();
 
+        if (button != null) {
+            if (!(button.IsActive())) {
+                swordStatus = Piercing.Stopped;
+                
+                //Save values
+                activatedButton = button;
+                button.Activate();
+                //cameraSavedPosAndRot = camera.transform;
+                newCamera = moveToCamera;
+                newCamera.enabled = true;
+                
+                //Begin Moving camera
+                SetCameraMove(moveToCamera.transform, cameraMoveTime, CameraMode.MovingTo);
+            }
+        }
+
+    }
+
+    void SetCameraMove(Transform moveTo, float moveTime, CameraMode mode) {
+            cameraTimer = 0;
+            cameraTimerLength = moveTime;
+            cameraMode = mode;
+            cameraMovePosAndRot = moveTo;
+    }
+
+    void TriggerButtonEffect(scr_button button) {
         if (button != null) {
             switch (button.action) {
                 case scr_button.Action.Open: 
@@ -397,8 +531,6 @@ public class scr_sword : MonoBehaviour
             break;
             }
         }
-
-
     }
 
     //Only process these collisions when we're not entering terrain
@@ -457,7 +589,11 @@ public class scr_sword : MonoBehaviour
 
     void Launch() {
         if (swordStatus == Piercing.Impaled) {
-            rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchAmount, launchVal.x * launchAmount), ForceMode.Force);
+                rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchVal.y * launchAmount, launchVal.x * launchAmount), ForceMode.Force);
+            
+                //Vector3 target = (arrow.transform.position - rigidbody.position).normalized;
+                //Quaternion deltaRotation = Quaternion.Euler(new Vector3(rotAmount, target.y,0));
+                rigidbody.AddTorque(arrowPivot.rotation  * Vector3.right * launchAmount, ForceMode.Force);
         }
         else {
             rigidbody.AddForce(arrowPivot.rotation * new Vector3(0, launchValFloor.y * launchAmount, launchValFloor.x * launchAmount), ForceMode.Force);
