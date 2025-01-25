@@ -46,6 +46,7 @@ public class scr_sword : MonoBehaviour
     public GameObject arrow;
     private SpriteRenderer arrowSprite;
     private Transform arrowPivot;
+    private float arrowBaseLength;
 
     //Collision
     [SerializeField, Range(0.005f, 0.1f)]
@@ -54,22 +55,26 @@ public class scr_sword : MonoBehaviour
     public float minVelocity = 1f;
     //private bool swordEnteringTerrain;
     //private bool impaled = false;
-    enum Piercing {Stopped, Lying, InAir, EnteringTerrain, Impaled}
+    enum Piercing {Stopped, Lying, InAir, EnteringTerrain, LeavingTerrain, Impaled}
     Piercing swordStatus = Piercing.InAir;
     UnityEngine.Collider otherEntity;
+    
+    //Hilt
+    Rigidbody hiltRigidbody;
 
     //Launching
     private bool launchCharging;
     private float launchTimer = 0;
     private float launchAmount;
-    public float minLaunch = 1f;
-    public float maxLaunch = 3f;
-    public float launchTimeout = 5f;
+    public float minTimeToCharge = 1f;
+    public float maxTimeToCharge = 3f;
+    public float chargeTimeout = 5f;
     private Quaternion launchDir;
     public Vector2 launchVal;
     public Vector2 launchValFloor;
     public float maxBend = 70f;
     private BendDeformer bend;
+    
 
 
 
@@ -79,7 +84,7 @@ public class scr_sword : MonoBehaviour
     private float usedRot;
 
     //Special Moves
-    enum Special {None, Floating, Zooming}
+    enum Special {None, Floating, Zooming, GroundPound}
     Special special = Special.None;
     
     private float specialLength;
@@ -88,6 +93,11 @@ public class scr_sword : MonoBehaviour
     public float floatLength = 1.0f;
     public float zoomLength = 0.5f;
 
+    private float baseMass;
+    public float groundPoundVelocity = 50f;
+    private Quaternion baseRot;
+
+    //public float groundPoundLength;
 
     //Activate Button
     private scr_button activatedButton;
@@ -125,6 +135,10 @@ public class scr_sword : MonoBehaviour
 
     public Material myMetal;
 
+    //Sound effects
+    public List<AudioClip> soundEffects = new List<AudioClip>();
+    private AudioSource player;
+
 
 
     // Start is called before the first frame update
@@ -149,10 +163,18 @@ public class scr_sword : MonoBehaviour
 
         arrowSprite = arrow.GetComponentInChildren<SpriteRenderer>();
         arrowPivot = arrow.transform.GetChild(0);
+        arrowBaseLength = arrow.transform.localScale.y;
+
+        baseRot = transform.rotation;
 
         bend = GetComponentInChildren<BendDeformer>();
 
+        hiltRigidbody = GetComponentInChildren<Rigidbody>();
+
+        player = GetComponent<AudioSource>();
     }
+
+    
 
     // Update is called once per frame
     void Update() {
@@ -177,8 +199,9 @@ public class scr_sword : MonoBehaviour
     }
 
     void LateUpdate() {
-            arrow.transform.position = hiltHitbox.transform.position;
-
+            if (arrowSprite.enabled) {
+                arrow.transform.position = hiltHitbox.transform.position - hiltHitbox.bounds.size/2;
+            }
             if ((camera.fieldOfView > 60) && (!launchCharging)) {
                 camera.fieldOfView -= 1;
             }
@@ -216,7 +239,7 @@ public class scr_sword : MonoBehaviour
     void UserInput() {
         
         //Begin Charging for a launch
-        if (Input.GetKeyDown(pullBack) && ((swordStatus == Piercing.Lying) || (swordStatus == Piercing.Impaled)))  {
+        if (Input.GetKeyDown(pullBack) && (swordStatus == Piercing.Impaled))  {
             arrowSprite.enabled = true;
             launchCharging = true;
             launchTimer = 0;
@@ -234,20 +257,20 @@ public class scr_sword : MonoBehaviour
             if (launchCharging) {
                 EndLaunchCharge();
 
-                if (launchTimer > minLaunch) {
+                if (launchTimer > minTimeToCharge) {
                     Launch();
                 }
             }
         }
 
-        if (Input.GetKey("escape")) {
+        if (Input.GetKey(KeyCode.Escape)) {
             UnityEngine.Application.Quit();
         }
 
         //Special moves
         if (special == Special.None) {
             if (Input.GetKeyDown(special1)) {
-                Float();
+                GroundPound();
             }
 
             if (Input.GetKeyDown(special2)) {
@@ -256,7 +279,7 @@ public class scr_sword : MonoBehaviour
         }
 
         //Add rotation
-        if (swordStatus == Piercing.InAir) {
+        if ((swordStatus == Piercing.InAir) && (special != Special.GroundPound)) {
             AirRotation();
         }
         else if (swordStatus == Piercing.Lying) {
@@ -280,8 +303,8 @@ public class scr_sword : MonoBehaviour
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(rotAmount, 0, 0) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
                 */
-                torque = (arrowPivot.rotation  * Vector3.back).normalized * rotAmount;
-
+                //torque = (arrowPivot.rotation  * Vector3.back).normalized * rotAmount;
+                torque = new Vector3(rotAmount, 0, 0);
                 
 
                 //rigidbody.AddTorque(launchDir * Vector3.forward * Time.deltaTime * rotAmount);
@@ -295,9 +318,9 @@ public class scr_sword : MonoBehaviour
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(-rotAmount, 0, 0) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
                 */
-                torque = (arrowPivot.rotation  * Vector3.forward).normalized * rotAmount;
+                //torque = (arrowPivot.rotation  * Vector3.forward).normalized * rotAmount;
 
-                
+                torque = new Vector3(-rotAmount, 0, 0);
 
                 //transform.localEulerAngles += launchDir * Vector3.right * Time.deltaTime * rotAmount;
             }
@@ -315,7 +338,8 @@ public class scr_sword : MonoBehaviour
                 Quaternion deltaRotation = Quaternion.Euler(new Vector3(0, 0, rotAmount) * Time.fixedDeltaTime);
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
                 */ 
-                torque = (arrowPivot.rotation  * Vector3.right).normalized * rotAmount;
+                //torque = (arrowPivot.rotation  * Vector3.right).normalized * rotAmount;
+                 torque = new Vector3(0, 0, rotAmount);
             }
 
             if (Input.GetKey(up)) {
@@ -326,10 +350,13 @@ public class scr_sword : MonoBehaviour
                 rigidbody.MoveRotation(rigidbody.rotation * deltaRotation);
 
                 */
-                torque = (arrowPivot.rotation  * Vector3.left).normalized * rotAmount;
+                //torque = (arrowPivot.rotation  * Vector3.left).normalized * rotAmount;
+                torque = new Vector3(0, 0, -rotAmount);
+
             }
 
             if (Input.GetKey(up) || Input.GetKey(down) || Input.GetKey(left) || Input.GetKey(right)) {
+                    //rigidbody.MoveRotation(rigidbody.rotation * Quaternion.Euler(torque * Time.deltaTime));
                     rigidbody.MoveRotation(rigidbody.rotation * Quaternion.Euler(torque * Time.deltaTime));
 
             }
@@ -389,37 +416,52 @@ public class scr_sword : MonoBehaviour
             special = Special.Floating;
         }   
     }
+
+    void GroundPound() {
+        if (swordStatus == Piercing.InAir)  {
+            //rigidbody.mass = baseMass * groundPoundMassFactor;
+            rigidbody.velocity = new Vector3(0, -groundPoundVelocity, 0);
+            rigidbody.angularVelocity = Vector3.zero;
+            transform.rotation = baseRot;
+            swordHitbox.enabled = false;
+            
+            //Groundpound has no timelimit so it wont ever reach this value
+            specialLength = 420;
+            special = Special.GroundPound;
+        }   
+    }
     void ProcessLaunchCharging() {
         if (launchCharging) {
             launchTimer += Time.deltaTime;
 
-            if (launchTimer > launchTimeout) {
+            if (launchTimer > chargeTimeout) {
                 EndLaunchCharge();
                 return;
             }
 
             launchAmount = launchTimer;
             //POTENTIALLY INEFFICENT
-            if (launchAmount > maxLaunch) {
-                launchAmount = maxLaunch;
+            if (launchAmount > maxTimeToCharge) {
+                launchAmount = maxTimeToCharge;
             }
             
             
 
             //Some visual effects
-            float arrowLength = EasingFunction.EaseOutExpo(0.5f, 3f, launchAmount/maxLaunch);
+            float arrowLength = EasingFunction.EaseOutExpo(0.1f, arrowBaseLength, launchAmount/maxTimeToCharge);
             arrowSprite.transform.localScale = new Vector3(arrow.transform.localScale.x, arrowLength,0);
 
-            camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchAmount/maxLaunch);
+            camera.fieldOfView = EasingFunction.EaseOutExpo(60, 90, launchAmount/maxTimeToCharge);
 
             //Bend
-            bend.Angle = EasingFunction.EaseOutExpo(0, maxBend, launchAmount/maxLaunch);
+            bend.Angle = EasingFunction.EaseOutExpo(0, maxBend, launchAmount/maxTimeToCharge);
         }
     }
 
     void SpecialMoves() {
         switch (special) {
-            case Special.Floating: 
+            case Special.Floating:
+            case Special.Zooming:
                 specialTimer += Time.deltaTime;
                 
             break;
@@ -463,6 +505,11 @@ public class scr_sword : MonoBehaviour
         if (swordStatus == Piercing.Impaled) {
             rigidbody.velocity = Vector3.zero;
             rigidbody.angularVelocity = Vector3.zero;
+        }
+
+        //Respawn
+        if (transform.position.y < -30) {
+            transform.position = tpPosition;
         }
     }
 
@@ -533,22 +580,7 @@ public class scr_sword : MonoBehaviour
         }
     }
 
-    //Only process these collisions when we're not entering terrain
-    void OnCollisionEnter() {
-        Debug.Log("Colliding");
-        //OnFloor(true);
-        if (swordStatus == Piercing.InAir)  {
-            swordStatus = Piercing.Lying;
-        }
-    }
 
-    void OnCollisionExit() {
-        Debug.Log("UnColliding");
-        //OnFloor(false);
-        if (swordStatus == Piercing.Lying)  {
-            swordStatus = Piercing.InAir;
-        }
-    }
 
 
     void OnTriggerEnter(UnityEngine.Collider other)
@@ -557,7 +589,7 @@ public class scr_sword : MonoBehaviour
         //bad but works
         if (other.material.name == wood.name + " (Instance)") {
             //Check we're above the needed amount of velocity
-            if (rigidbody.velocity.magnitude > minVelocity) {
+            if (/*rigidbody.velocity.magnitude > minVelocity*/true) {
                 Debug.Log("Triggering with " + other.name);
 
                 //canLaunch = true;
@@ -586,6 +618,25 @@ public class scr_sword : MonoBehaviour
         //OnFloor(false);
     }
 
+    //Only process these collisions when we're not entering terrain
+    void OnCollisionEnter() {
+        Debug.Log("Colliding");
+
+        //OnFloor(true);
+        if (swordStatus == Piercing.InAir)  {
+            swordStatus = Piercing.Lying;
+            EndSpecial();
+        }
+    }
+
+    void OnCollisionExit() {
+        Debug.Log("UnColliding");
+        //OnFloor(false);
+        if (swordStatus == Piercing.Lying)  {
+            swordStatus = Piercing.InAir;
+        }
+    }
+
 
     void Launch() {
         if (swordStatus == Piercing.Impaled) {
@@ -600,7 +651,7 @@ public class scr_sword : MonoBehaviour
         }
         //rigidbody.AddRelativeTorque(arrowPivot.rotation * new Vector3(0, 0, 100 * launchTimer), ForceMode.Force);
         ToggleRigidbodyGravity(true);
-        swordStatus = Piercing.InAir;
+        swordStatus = Piercing.LeavingTerrain;
 
         //Add a rotation
         //Quaternion lookRot = Quaternion.FromToRotation(arrow.transform.forward - transform.forward, Vector3.forward);
@@ -609,5 +660,23 @@ public class scr_sword : MonoBehaviour
 
     void ToggleRigidbodyGravity(bool val) {
         rigidbody.useGravity = val;
+    }
+
+    void playSound(int i) {
+        AudioClip clip;
+        try {
+            clip = soundEffects[i];
+
+            if (clip != null) {
+                player.clip = clip;
+                player.Play();
+            }
+        }
+        catch {}
+
+    }
+
+    void playSound(string s) {
+
     }
 }
