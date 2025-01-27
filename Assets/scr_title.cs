@@ -18,6 +18,6 @@ public class scr_title : MonoBehaviour
     }
 
     public void BeginGame() {
-        SceneManager.LoadScene("Main");
+        SceneManager.LoadScene("MainScene");
     }
 }

@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Pivot
   - Button
+  - Sharp
   layers:
   - Default
   - TransparentFX

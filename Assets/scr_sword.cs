@@ -105,6 +105,7 @@ public class scr_sword : MonoBehaviour
     private CameraMode cameraMode = CameraMode.None;
     private Transform cameraMovePosAndRot;
     private Transform cameraSavedPosAndRot;
+    private GameObject hittingButton;
 
     //ANother method
     private Camera savedCamera;
@@ -510,6 +511,9 @@ public class scr_sword : MonoBehaviour
         //Respawn
         if (transform.position.y < -30) {
             transform.position = tpPosition;
+            rigidbody.angularVelocity = Vector3.zero;
+            rigidbody.velocity = Vector3.zero;
+
         }
     }
 
@@ -525,32 +529,36 @@ public class scr_sword : MonoBehaviour
     }
 
     void Impale() {
+        //Assures this onyl runs once if we're hitting multiple terrains
+        if (swordStatus == Piercing.EnteringTerrain) {
+            ToggleRigidbodyGravity(false);
 
-        ToggleRigidbodyGravity(false);
+            rigidbody.velocity = Vector3.zero;
+            rigidbody.angularVelocity = Vector3.zero;
 
-        rigidbody.velocity = Vector3.zero;
-        rigidbody.angularVelocity = Vector3.zero;
+            //wordHitbox.enabled = true;
+            swordStatus = Piercing.Impaled;
 
-        //wordHitbox.enabled = true;
-        swordStatus = Piercing.Impaled;
-
-        if (otherEntity.CompareTag("Button")) {
-            TriggerButton(otherEntity);
+            if (hittingButton != null) {
+            //if (otherEntity.CompareTag("Button")) {
+                TriggerButton(hittingButton);
+            }
         }
+
         //OnFloor(true);
     }
 
-    void TriggerButton(Collider buttonObject) {
+    void TriggerButton(GameObject buttonObject) {
         scr_button button = buttonObject.GetComponentInParent<scr_button>();
         Camera moveToCamera = buttonObject.transform.parent.GetComponentInChildren<Camera>();
 
         if (button != null) {
-            if (!(button.IsActive())) {
+            if (!button.IsActive()) {
                 swordStatus = Piercing.Stopped;
                 
                 //Save values
                 activatedButton = button;
-                button.Activate();
+                activatedButton.Activate();
                 //cameraSavedPosAndRot = camera.transform;
                 newCamera = moveToCamera;
                 newCamera.enabled = true;
@@ -592,6 +600,10 @@ public class scr_sword : MonoBehaviour
             if (/*rigidbody.velocity.magnitude > minVelocity*/true) {
                 Debug.Log("Triggering with " + other.name);
 
+                //Hitting Button
+                if (otherEntity.CompareTag("Button")) {
+                    hittingButton = otherEntity.gameObject;
+                 }
                 //canLaunch = true;
 
                 //Set the sword hitbox to no longer collide
@@ -613,7 +625,7 @@ public class scr_sword : MonoBehaviour
         swordHitbox.enabled = true;
         swordStatus = Piercing.InAir;
 
-
+        hittingButton = null;
         ToggleRigidbodyGravity(true);
         //OnFloor(false);
     }
@@ -623,7 +635,7 @@ public class scr_sword : MonoBehaviour
         Debug.Log("Colliding");
 
         //OnFloor(true);
-        if (swordStatus == Piercing.InAir)  {
+            if (swordStatus == Piercing.InAir)  {
             swordStatus = Piercing.Lying;
             EndSpecial();
         }

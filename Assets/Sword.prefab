@@ -460,7 +460,7 @@ GameObject:
   - component: {fileID: 5533217697904595685}
   m_Layer: 0
   m_Name: Sword
-  m_TagString: Untagged
+  m_TagString: Sharp
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -515,7 +515,7 @@ GameObject:
   - component: {fileID: 5217536630397961928}
   m_Layer: 0
   m_Name: Point
-  m_TagString: Untagged
+  m_TagString: Sharp
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -1054,6 +1054,7 @@ MonoBehaviour:
   wood: {fileID: 13400000, guid: 575f861017187114194a7207350ee5f6, type: 2}
   stone: {fileID: 13400000, guid: 7cbc28e3802752546be07f65cc868b28, type: 2}
   myMetal: {fileID: 2100000, guid: ff7e376d518671f4db67157a346add34, type: 2}
+  soundEffects: []
 --- !u!114 &8116777705147612397
 MonoBehaviour:
   m_ObjectHideFlags: 0

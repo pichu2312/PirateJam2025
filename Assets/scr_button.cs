@@ -15,10 +15,10 @@ public class scr_button : MonoBehaviour
     public void Activate() {
         activated = true;  
 
-        GetComponentsInChildren<Transform>()[2].localScale = new Vector3(GetComponentInChildren<Transform>().localScale.x, 0.1f, GetComponentInChildren<Transform>().localScale.z);
+        //GetComponentsInChildren<Transform>()[2].localScale = new Vector3(GetComponentsInChildren<Transform>()[2].localScale.x, 1f, GetComponentsInChildren<Transform>()[2].localScale.z);
         GetComponentInChildren<MeshRenderer>().material.color = Color.red;
 
-        GetComponentInChildren<MeshCollider>().enabled = false;
+        //GetComponentInChildren<BoxCollider>().enabled = false;
     }
 
     public bool IsActive() {
