@@ -6,7 +6,6 @@ using System.Threading;
 using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.WSA;
 using Vector3 = UnityEngine.Vector3;
 using Vector2 = UnityEngine.Vector2;
 using Quaternion = UnityEngine.Quaternion;
@@ -18,7 +17,9 @@ using Deform;
 
 public class scr_sword : MonoBehaviour
 {
-    
+    //Random
+    System.Random rnd = new System.Random();
+
     //Testing
     [SerializeField]
     private bool debug = true;
@@ -140,6 +141,16 @@ public class scr_sword : MonoBehaviour
     public List<AudioClip> soundEffects = new List<AudioClip>();
     private AudioSource player;
 
+    //Tutorial
+    private int tutorialIndex = 0;
+    public List<GameObject> tutorialParts = new List<GameObject>();
+
+    //Stat tracks
+    private int launches = 0;
+    private int fallsOnTheFloor = 0;
+    private int groundPounds = 0;
+    private int fallsOutOfTheWorld = 0;
+
 
 
     // Start is called before the first frame update
@@ -245,12 +256,7 @@ public class scr_sword : MonoBehaviour
             launchCharging = true;
             launchTimer = 0;
 
-            //Set positions to the other side of our spring camera
-            launchDir = springCamera.transform.rotation.normalized;
-            arrowPivot.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y, 0);
-
-            //same with bendy
-            bend.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y + 90, 0);
+            SetLaunchProperties();
         }
 
 
@@ -286,6 +292,15 @@ public class scr_sword : MonoBehaviour
         else if (swordStatus == Piercing.Lying) {
             GroundRotation();
         }
+    }
+
+    void SetLaunchProperties() {
+        //Set positions to the other side of our spring camera
+        launchDir = springCamera.transform.rotation.normalized;
+        arrowPivot.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y, 0);
+
+        //same with bendy
+        bend.transform.eulerAngles = new Vector3(0, springCamera.transform.eulerAngles.y + 90, 0);
     }
 
     void EndLaunchCharge() {
@@ -359,6 +374,7 @@ public class scr_sword : MonoBehaviour
             if (Input.GetKey(up) || Input.GetKey(down) || Input.GetKey(left) || Input.GetKey(right)) {
                     //rigidbody.MoveRotation(rigidbody.rotation * Quaternion.Euler(torque * Time.deltaTime));
                     rigidbody.MoveRotation(rigidbody.rotation * Quaternion.Euler(torque * Time.deltaTime));
+                    ProgressTutorial(4);
 
             }
     }
@@ -423,12 +439,15 @@ public class scr_sword : MonoBehaviour
             //rigidbody.mass = baseMass * groundPoundMassFactor;
             rigidbody.velocity = new Vector3(0, -groundPoundVelocity, 0);
             rigidbody.angularVelocity = Vector3.zero;
-            transform.rotation = baseRot;
+            transform.rotation = new Quaternion(0, 0, 180, 1);//baseRot;
             swordHitbox.enabled = false;
             
             //Groundpound has no timelimit so it wont ever reach this value
             specialLength = 420;
             special = Special.GroundPound;
+
+            ProgressTutorial(6);
+            groundPounds++;
         }   
     }
     void ProcessLaunchCharging() {
@@ -456,6 +475,9 @@ public class scr_sword : MonoBehaviour
 
             //Bend
             bend.Angle = EasingFunction.EaseOutExpo(0, maxBend, launchAmount/maxTimeToCharge);
+
+            //Set direcftion of arrow
+            SetLaunchProperties();
         }
     }
 
@@ -513,7 +535,7 @@ public class scr_sword : MonoBehaviour
             transform.position = tpPosition;
             rigidbody.angularVelocity = Vector3.zero;
             rigidbody.velocity = Vector3.zero;
-
+            fallsOutOfTheWorld++;
         }
     }
 
@@ -543,7 +565,12 @@ public class scr_sword : MonoBehaviour
             //if (otherEntity.CompareTag("Button")) {
                 TriggerButton(hittingButton);
             }
+
+
+            ProgressTutorial(1);
+
         }
+
 
         //OnFloor(true);
     }
@@ -635,10 +662,22 @@ public class scr_sword : MonoBehaviour
         Debug.Log("Colliding");
 
         //OnFloor(true);
-            if (swordStatus == Piercing.InAir)  {
+        if (swordStatus == Piercing.InAir)  {
             swordStatus = Piercing.Lying;
+
+            //Sound
+            playSound(rnd.Next(3));
+
             EndSpecial();
+
+            fallsOnTheFloor++;
+
+            if (fallsOnTheFloor > 5) {
+                ProgressTutorial(7);
+            }
         }
+
+        ProgressTutorial(0);
     }
 
     void OnCollisionExit() {
@@ -668,6 +707,20 @@ public class scr_sword : MonoBehaviour
         //Add a rotation
         //Quaternion lookRot = Quaternion.FromToRotation(arrow.transform.forward - transform.forward, Vector3.forward);
         //rigidbody.AddTorque(lookRot.eulerAngles.normalized * 100, ForceMode.Force);
+        launches++;
+        //Tutorial
+        if (launches == 1) {
+            ProgressTutorial(2);
+        }
+        else if (launches == 3) {
+            ProgressTutorial(3);
+        }
+        else if (launches == 5) {
+            ProgressTutorial(5);
+        }
+        else {
+             ProgressTutorial(8);
+        }
     }
 
     void ToggleRigidbodyGravity(bool val) {
@@ -691,4 +744,14 @@ public class scr_sword : MonoBehaviour
     void playSound(string s) {
 
     }
+
+    //ProgressTutorial
+    void ProgressTutorial(int index) {
+        if ((tutorialIndex == index) && (tutorialIndex < tutorialParts.Count)) {
+            if (index > 0) {tutorialParts[index - 1].SetActive(false); };
+            if (index < tutorialParts.Count) {tutorialParts[index].SetActive(true);};
+            tutorialIndex++;
+        }
+    }
+
 }
