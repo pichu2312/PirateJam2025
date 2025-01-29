@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using GogoGaga.OptimizedRopesAndCables;
 using UnityEngine;
 
 public class scr_button : MonoBehaviour
@@ -8,6 +9,8 @@ public class scr_button : MonoBehaviour
     public enum Action {Open}
     public Action action;
     private bool activated = false;
+    public RopeMesh rope1;
+    public Rope rope2;
 
     void Start() {
 

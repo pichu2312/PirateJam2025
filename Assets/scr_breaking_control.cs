@@ -11,6 +11,7 @@ public class scr_breaking_control : MonoBehaviour
     public GameObject remains;
 
     void OnCollisionEnter(Collision other) {
+        GetComponent<AudioSource>().Play();
         InitiateDestruction(other.gameObject);
     }
 
@@ -24,6 +25,12 @@ public class scr_breaking_control : MonoBehaviour
             for (int i = 0; i < destroyObjects; i++) {
                 var created = Instantiate(remains, transform.position, transform.rotation);
                 created.GetComponent<scr_remains>().Initiate(GetComponent<MeshRenderer>().material, transform.localScale.x/destroyObjects, destroyTime);
+
+                //if its the first one, play a sound effectt
+                if (i == 0) {
+                    created.GetComponents<AudioSource>()[0].Play();
+
+                }
             }
 
 

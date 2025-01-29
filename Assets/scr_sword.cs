@@ -13,6 +13,7 @@ using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEngine.EventSystems;
 using Deform;
+using UnityEngine.UI;
 
 
 public class scr_sword : MonoBehaviour
@@ -145,11 +146,43 @@ public class scr_sword : MonoBehaviour
     private int tutorialIndex = 0;
     public List<GameObject> tutorialParts = new List<GameObject>();
 
+    //Story
+    
+    private int storyIndex = 0;
+    public List<TextMeshProUGUI> storyParts = new List<TextMeshProUGUI>();
+
+        enum StoryMode {FadeIn, FadeOut, Halt, End}
+    private StoryMode storyMode = StoryMode.FadeIn;
+    
+    public float fadeTime = 1f;
+    public float textFadeTime = 1f;
+
+    private float fadeTimer = 0f;
+
+    //public GameObject publicStoryImage;
+    public UnityEngine.UI.Image storyImage;
+    //public Sprite storyImage;
+
+    public TextMeshProUGUI pressSpaceToContinue;
+
+    //End game
+    private bool endGameOnNextFall = false;
+    private bool gameEnding = false;
+    public GameObject endGame;
+    public List<GameObject> creditParts = new List<GameObject>();
+    private int creditsIndex = 0;
+
+    public UnityEngine.UI.Image gameEndImage;
+    public TextMeshProUGUI gameEndSpace;
+    
+
+
     //Stat tracks
     private int launches = 0;
     private int fallsOnTheFloor = 0;
     private int groundPounds = 0;
     private int fallsOutOfTheWorld = 0;
+    private float timePlayed;
 
 
 
@@ -157,6 +190,7 @@ public class scr_sword : MonoBehaviour
     void Start()
     {
         InitialiseComponents();
+        BeginStory();
     }
 
     
@@ -184,26 +218,44 @@ public class scr_sword : MonoBehaviour
         hiltRigidbody = GetComponentInChildren<Rigidbody>();
 
         player = GetComponent<AudioSource>();
+
+        //storyImage = publicStoryImage.GetComponent<UnityEngine.UI.Image>();
+    }
+
+    void BeginStory() {
+        rigidbody.useGravity = false;
+        swordStatus = Piercing.Stopped;
+
+        rigidbody.AddTorque(0, 180   , 180);
     }
 
     
 
     // Update is called once per frame
     void Update() {
-        DebugCommands();
-
-        //Pause for cutscenes and the like
-        if (swordStatus != Piercing.Stopped) {
-            UserInput();
-
-            ProcessLaunchCharging();
-
-            SpecialMoves();
+        if (gameEnding) {
+            GameEnd();
         }
+        else {
+            DebugCommands();
 
-        MoveCamera();
+            //Pause for cutscenes and the like
+            if (swordStatus != Piercing.Stopped) {
+                UserInput();
 
-        RoutineChecks();
+                ProcessLaunchCharging();
+
+                SpecialMoves();
+
+                timePlayed += Time.deltaTime;
+            }
+
+            MoveCamera();
+
+            RoutineChecks();
+            
+            PerformStory();
+        }
     }
     void FixedUpdate()
     {
@@ -229,14 +281,43 @@ public class scr_sword : MonoBehaviour
             }
     }
 
+    void GameEnd() {
+        if (gameEndImage.color.a != 255) {
+            fadeTimer += Time.deltaTime;
+            gameEndImage.color = SetAlpha(gameEndImage.color, Mathf.Lerp(0, 255, fadeTimer/fadeTime));
+
+            if (gameEndImage.color.a == 255) {
+                gameEndSpace.enabled = true;
+                creditParts[0].SetActive(true);
+
+                //Set stats screen quickly too
+                creditParts[0].GetComponentsInChildren<TextMeshProUGUI>()[1].SetText($"Stats:\nYou leapt {launches} Times\nYou Groundpounded {groundPounds} times\nYou Fell on the floor {fallsOnTheFloor} times\nAll in {timePlayed} minutes!") ;
+            }
+        }
+        else {
+            if (Input.GetKeyDown(pullBack)) {
+                if (creditsIndex < creditParts.Count - 1) {
+                    creditParts[creditsIndex].SetActive(false);
+
+                    creditsIndex++;
+        
+                    creditParts[creditsIndex].SetActive(true);
+                }
+
+            }
+        }
+    }
+
 
     void DebugCommands() {
-        if (debug) {
-            if (Input.GetKeyUp(KeyCode.Tab)) {
+                    if (Input.GetKeyUp(KeyCode.R)) {
                 transform.SetPositionAndRotation(tpPosition, tpRotation);
                 rigidbody.angularVelocity = Vector3.zero;
             }
+        if (debug) {
 
+
+            
             if (Input.GetKeyUp(KeyCode.Return)) {
                 swordHitbox.enabled = true;
             }
@@ -257,6 +338,7 @@ public class scr_sword : MonoBehaviour
             launchTimer = 0;
 
             SetLaunchProperties();
+            playSound(2);
         }
 
 
@@ -268,10 +350,6 @@ public class scr_sword : MonoBehaviour
                     Launch();
                 }
             }
-        }
-
-        if (Input.GetKey(KeyCode.Escape)) {
-            UnityEngine.Application.Quit();
         }
 
         //Special moves
@@ -446,6 +524,8 @@ public class scr_sword : MonoBehaviour
             specialLength = 420;
             special = Special.GroundPound;
 
+            playSound(3);
+
             ProgressTutorial(6);
             groundPounds++;
         }   
@@ -531,12 +611,94 @@ public class scr_sword : MonoBehaviour
         }
 
         //Respawn
-        if (transform.position.y < -30) {
+        if ((transform.position.y < -30) && (endGameOnNextFall)) {
+            gameEnding = true;
+            swordStatus = Piercing.Stopped;
+            fadeTimer = 0;
+            endGame.SetActive(true);
+        }
+        else if (transform.position.y < -30) {
             transform.position = tpPosition;
             rigidbody.angularVelocity = Vector3.zero;
             rigidbody.velocity = Vector3.zero;
             fallsOutOfTheWorld++;
         }
+    }
+
+    void PerformStory() {
+        switch (storyMode) {
+            case StoryMode.End: break;
+            case StoryMode.FadeIn: 
+                fadeTimer += Time.deltaTime;
+                var alphaVal1 = Mathf.Lerp(0, 1, fadeTimer/fadeTime);
+                var alphaValStoryImage1 = Mathf.Lerp(0, 0.9f, fadeTimer/fadeTime);
+
+                storyImage.color = SetAlpha(storyImage.color, alphaValStoryImage1);
+                storyParts[0].color = SetAlpha(storyParts[0].color, alphaVal1);
+                pressSpaceToContinue.color = SetAlpha(pressSpaceToContinue.color, alphaVal1);
+
+                if (fadeTimer > fadeTime) {
+                    storyMode = StoryMode.Halt;
+                    fadeTimer = textFadeTime;
+                }
+            break;
+            case StoryMode.Halt: 
+                if (Input.GetKeyDown(pullBack)) {
+                    if (storyIndex < storyParts.Count - 1) {
+                        if (storyParts[storyIndex].color.a != 1) {
+                            storyParts[storyIndex].color = SetAlpha(storyParts[storyIndex].color, 1);
+                        }
+
+                        storyIndex++;
+                        fadeTimer = 0;
+                    }
+                    else {
+                        storyMode = StoryMode.FadeOut;
+                        fadeTimer = 0;
+                        break;
+                    }
+
+                }
+
+                if (fadeTimer < textFadeTime) {
+                    fadeTimer += Time.deltaTime;
+
+                    storyParts[storyIndex].color = SetAlpha(storyParts[storyIndex].color, Mathf.Lerp(0, 1, fadeTimer/textFadeTime));
+                }
+            
+            break;
+            case StoryMode.FadeOut: 
+                fadeTimer += Time.deltaTime;
+                var alphaVal2 = Mathf.Lerp(1, 0, fadeTimer/fadeTime);
+                var alphaValStoryImage2 = Mathf.Lerp(0.9f, 0, fadeTimer/fadeTime);
+
+
+                storyImage.color = SetAlpha(storyImage.color, alphaValStoryImage2);
+                
+                foreach (TextMeshProUGUI t in storyParts) {
+                    t.color = SetAlpha(t.color, alphaVal2);
+                }
+
+                pressSpaceToContinue.color = SetAlpha(pressSpaceToContinue.color, alphaVal2);
+
+                if (fadeTimer > fadeTime) {
+                    BeginGame();
+                }
+            break;
+
+        }
+    }
+
+    void BeginGame() {
+        rigidbody.useGravity = true;
+        rigidbody.velocity = new Vector3(0, -50, 0);
+        swordStatus = Piercing.InAir;
+        springCamera.enabled = true;
+        storyMode = StoryMode.End;
+    }
+
+    Color SetAlpha(Color image, float alpha) {
+        return new Color(image.r, image.g, image.b, alpha);
     }
 
     //If the sword is entering a piece of terrain, increase the timer before its hitbox is renabled
@@ -566,6 +728,7 @@ public class scr_sword : MonoBehaviour
                 TriggerButton(hittingButton);
             }
 
+            playSound(4);
 
             ProgressTutorial(1);
 
@@ -609,6 +772,16 @@ public class scr_sword : MonoBehaviour
             switch (button.action) {
                 case scr_button.Action.Open: 
                 Destroy(button.otherObject);
+                if (button.rope1 != null) {
+                    Destroy(button.rope1);
+                    Destroy(button.rope2);
+
+                }
+
+                //Only cause Im going insane
+                endGameOnNextFall = true;
+                playSound(6);
+
                 
             break;
             }
@@ -658,7 +831,7 @@ public class scr_sword : MonoBehaviour
     }
 
     //Only process these collisions when we're not entering terrain
-    void OnCollisionEnter() {
+    void OnCollisionEnter(Collision collision) {
         Debug.Log("Colliding");
 
         //OnFloor(true);
@@ -666,7 +839,12 @@ public class scr_sword : MonoBehaviour
             swordStatus = Piercing.Lying;
 
             //Sound
-            playSound(rnd.Next(3));
+            if (collision.collider.material.name == wood.name + " (Instance)") {
+                playSound(0);
+            }
+            else if (collision.collider.material.name == stone.name + " (Instance)") {
+                playSound(1);
+            }
 
             EndSpecial();
 
@@ -747,10 +925,11 @@ public class scr_sword : MonoBehaviour
 
     //ProgressTutorial
     void ProgressTutorial(int index) {
-        if ((tutorialIndex == index) && (tutorialIndex < tutorialParts.Count)) {
+        if ((tutorialIndex == index) && (tutorialIndex <= tutorialParts.Count)) {
             if (index > 0) {tutorialParts[index - 1].SetActive(false); };
             if (index < tutorialParts.Count) {tutorialParts[index].SetActive(true);};
             tutorialIndex++;
+            playSound(5);
         }
     }
 

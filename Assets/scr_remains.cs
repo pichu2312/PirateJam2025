@@ -25,4 +25,8 @@ public class scr_remains : MonoBehaviour
 
         this.destroyTime = destroyTime;
     }
+
+    public void OnCollisionEnter() {
+//GetComponents<AudioSource>()[1].Play();
+    }
 }
